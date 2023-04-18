@@ -1,0 +1,148 @@
+---
+title: "MVCO Grazing Analysis"
+author: "Sophia Mirrashidi, Josephine Kaminaga, Holly Moeller"
+date: "4/18/2023"
+output: html_document
+---
+
+
+## Importing data
+
+The first step is to download the relevant tab of the Google Sheet as a .csv. Save it someplace that you can find it on your computer, so that you can import it into R as a data frame.
+
+Here I'm loading the data file. I find it easiest to copy the complete file path from my computer. By storing the downloaded .csv file in the same folder, I can easily access the data even if I have downloaded a new copy. (I just need to make sure to "replace" the old file with the new one, instead of creating a new version.)
+
+```{r}
+extrdat <- read.csv("/Users/hollyvm/GoogleSync/Collaborations/MVCOCiliates/CiliateGrazingData - ExtractedData.csv",header=T)
+
+str(extrdat) # The str() structure command is one of my favourites in R for quickly getting a sense for whether data import worked. I'm especially checking to make sure that R correctly imported my grazing rates and prey concentrations as numeric values.
+```
+
+To make it easier to sort through unique datasets, I'm going to add a column to our data frame that concatenates information about predator and prey.
+```{r}
+extrdat$Pred.Prey <- paste(extrdat$Genus,extrdat$Species,'.',extrdat$Prey,sep='')
+# The paste() function concatenates strings. I'm using a "." to separate the predator and prey names. The "sep=''" argument tells R to concatenate the strings with no separation.
+
+# We'll use the head() function and some subsetting commands to check our work.
+names(extrdat) # Pulls the names of all the columns in extrdat
+names(extrdat)%in%c('Genus','Species','Prey','Pred.Prey') # Tells us which columns match the list of interest
+extrdat[1,1] # Pulls the first row and first column of extrdat
+head(extrdat[,names(extrdat)%in%c('Genus','Species','Prey','Pred.Prey')]) # Displays the first six rows of the columns of interest in extrdat
+
+```
+
+We can see that the concatenation worked!
+
+## Loading packages
+```{r}
+# Nothing here for now but I'm sure we can think of something...
+```
+
+
+
+
+## Test case: Fitting a grazing curve
+
+Let's make a list of all the possible combinations we may have. 
+
+```{r}
+head(unique(extrdat$Pred.Prey)) # Gives us a list of all of the unique predator-prey combinations; here I'm subsetting to just the first six so we're not overwhelmed
+pred.prey.sets <- unique(extrdat$Pred.Prey) # Saves this list as a variable
+length(pred.prey.sets) # Tells us how many there are
+```
+
+The first example actually has some grazing data associated with it.
+```{r}
+pred.prey.sets[1] # Identify the first case study
+extrdat[extrdat$Pred.Prey==pred.prey.sets[1],] # Subset the data by this predator/prey pair
+subdat <- extrdat[extrdat$Pred.Prey==pred.prey.sets[1],] # Save this subset of data
+dim(subdat) # Check the size of the matrix
+subdat <- subdat[!is.na(subdat$PreyConsumption.preyperciliateperday),] # Extract just the rows that have grazing data (removing things that have NA)
+dim(subdat)
+```
+
+Let's make a plot!
+```{r}
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday)
+
+# Adding some modifiers to make the plot more interpretable
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Grazing Rate (prey per ciliate per day)')
+
+# We can also check whether other experimental conditions really modify the grazing curve
+subdat2 <- subdat[subdat$Salinity==35&subdat$Light.Level==100,]
+plot(subdat2$PreyConc.cellsmL,subdat2$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Grazing Rate (prey per ciliate per day)')
+
+```
+Now it's time to try a curve fit. We're going to use nls() for non-linear least squares regression. NLS is a pretty permissive function in that you can fit any curve shape you specify. But it's picky about the start conditions that you give it.
+
+```{r}
+help(nls) # Pulls up the documentation for nls.
+```
+
+We are going to fit a Holling Type II Functional Response:
+
+$$
+g = \frac{aP}{1+ahP}
+$$
+```{r}
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*PreyConc.cellsmL/(1+a*h*PreyConc.cellsmL),data=subdat,start=list(a=1/2000,h=1/4))
+
+HollingFit
+summary(HollingFit)
+```
+
+So we were able to fit this, but how did I come up with the guesses for a and h?
+
+The attack rate is the initial slope. Let's approximate this as the slope of the full dataset.
+```{r}
+lm(subdat$PreyConsumption.preyperciliateperday~subdat$PreyConc.cellsmL) # Linear model of the full dataset
+lm(subdat$PreyConsumption.preyperciliateperday~subdat$PreyConc.cellsmL)$coefficients[2] # Slope from this linear model
+
+a.start <- lm(subdat$PreyConsumption.preyperciliateperday~subdat$PreyConc.cellsmL)$coefficients[2]
+
+```
+
+The handling time is the inverse of the max consumption rate.
+```{r}
+1/max(subdat$PreyConsumption.preyperciliateperday)
+h.start <- 1/max(subdat$PreyConsumption.preyperciliateperday)
+```
+
+Putting this all together...
+
+```{r}
+a.start <- lm(subdat$PreyConsumption.preyperciliateperday~subdat$PreyConc.cellsmL)$coefficients[2]
+h.start <- 1/max(subdat$PreyConsumption.preyperciliateperday)
+
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*PreyConc.cellsmL/(1+a*h*PreyConc.cellsmL),data=subdat,start=list(a=a.start,h=h.start))
+
+HollingFit
+summary(HollingFit)
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+a.fit
+h.fit
+```
+
+Why do you think the fit attack rate is higher than the slope of all the data?
+
+Finally, we can overlay this curve on our data and see how we did.
+
+```{r}
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Grazing Rate (prey per ciliate per day)')
+
+preyset <- seq(from = 0, to = max(subdat$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*preyset/(1+a.fit*h.fit*preyset) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+
+```
+
+
+
+
+
+
+
+

@@ -1,0 +1,128 @@
+---
+title: "GrazingCurveFits_LiveCode"
+author: "HVM"
+date: "4/18/2023"
+output: html_document
+---
+
+```{r}
+extrdat <- read.csv("/Users/hollyvm/GoogleSync/Collaborations/MVCOCiliates/CiliateGrazingData - ExtractedData.csv",header=T)
+head(extrdat)
+str(extrdat) # str() = structure
+```
+
+
+```{r}
+extrdat$Pred.Prey <- paste(extrdat$Genus,extrdat$Species,'.',extrdat$Prey,sep='')
+
+Pred.Prey.list <- unique(extrdat$Pred.Prey)
+length(Pred.Prey.list)
+
+```
+
+```{r}
+Pred.Prey.list[1]
+subdat <- extrdat[extrdat$Pred.Prey==Pred.Prey.list[1],]
+dim(subdat)
+subdat <- subdat[!is.na(subdat$PreyConsumption.preyperciliateperday),]
+dim(subdat)
+
+head(subdat)
+
+```
+
+This is basic text...
+
+```{r,fig.width=3,fig.height=2}
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Consumption Rate (prey per ciliate per day)')
+
+subdat2 <- subdat[subdat$Light.Level==100&subdat$Salinity==35,]
+
+plot(subdat2$PreyConc.cellsmL,subdat2$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Consumption Rate (prey per ciliate per day)')
+```
+
+Let's use nls() to fit a saturating curve shape
+
+```{r}
+help(nls)
+```
+
+Holling Type II Functional Response:
+
+$$
+g = \frac{aP}{1+ahP}
+$$
+
+
+```{r}
+
+nls(PreyConsumption.preyperciliateperday ~ a*PreyConc.cellsmL/(1+a*h*PreyConc.cellsmL) , data = subdat, start = list(a = 1/2000 , h = 1/4))
+
+
+
+```
+
+```{r,fig.width=3,fig.height=2}
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Consumption Rate (prey per ciliate per day)')
+
+Prey.set <- seq(from=0,to=max(subdat$PreyConc.cellsmL),length.out = 1000)
+Predictions <- 0.002132*Prey.set/(1+0.002132*0.305760*Prey.set)
+
+lines(Prey.set,Predictions,lwd=2,col='blue')
+
+```
+
+Fancier approach!
+
+Step one: Estimate the starting parameter values
+
+```{r}
+# Estimate the attack rate as the slope of the data
+a.est <- lm(subdat$PreyConsumption.preyperciliateperday~subdat$PreyConc.cellsmL)$coefficients[2]
+
+# Estimate the handling time as 1/max grazing rate
+h.est <- 1/max(subdat$PreyConsumption.preyperciliateperday)
+
+
+```
+
+
+Step two: Fit the model
+
+```{r}
+
+fit1 <- nls(PreyConsumption.preyperciliateperday ~ a*PreyConc.cellsmL/(1+a*h*PreyConc.cellsmL) , data = subdat, start = list(a = a.est , h = h.est))
+
+fit1
+
+summary(fit1)
+
+a.fit <- summary(fit1)$parameters[1,1]
+h.fit <- summary(fit1)$parameters[2,1]
+```
+
+Step three: overlay fit on the plot
+
+```{r,fig.width=3,fig.height=2}
+plot(subdat$PreyConc.cellsmL,subdat$PreyConsumption.preyperciliateperday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Consumption Rate (prey per ciliate per day)')
+
+Prey.set <- seq(from=0,to=max(subdat$PreyConc.cellsmL),length.out = 1000)
+Predictions <- a.fit*Prey.set/(1+a.fit*h.fit*Prey.set)
+
+lines(Prey.set,Predictions,lwd=2,col='blue')
+
+```
+
+
+# Subheader: Growth
+## Subsubheader
+### can i do three?
+
+Monod kinetics (for growth) with an x-intercept representing the minimum amount of prey for positive growth.
+
+$$
+\mu = \frac{\mu_{\max}(P-x)}{H+(P-x)}
+$$
+
+
+
