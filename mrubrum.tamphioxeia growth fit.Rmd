@@ -1,0 +1,64 @@
+---
+title: "ciliates"
+output: html_document
+date: "2023-05-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+data <- read.csv("UCSB/CiliateGrazingData - ExtractedData.csv")
+data$Pred.Prey <- paste(data$Genus,data$Species,'.',data$Prey,sep='')
+
+# Subsetting data for the M. rubrum, T. amphioxeia combo
+curPaper <- data[data$Pred.Prey==unique(data$Pred.Prey)[3],]
+curPaper
+
+# Making a basic plot of prey concentration vs. growth rate
+plot(curPaper$Growth.perday ~ curPaper$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Growth per day')
+
+# Make an NLS fit for the data
+# Equation is growth(max) * [prey] / H + [prey]
+# from guesstimation, half saturation = 4500 cells/mL
+# and growth max = 0.3
+MonodFit <- nls(Growth.perday ~ (mu*PreyConc.cellsmL)/(H+PreyConc.cellsmL),data=curPaper,start=list(mu=0.3,H=4500))
+
+summary(MonodFit)
+
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+```
+
+
+```{r}
+
+plot(curPaper$PreyConc.cellsmL,curPaper$Growth.perday,las=1,xlab='Prey Concentration (cells/mL)',ylab='Growth Rate')
+
+preyset <- seq(from = 0, to = max(curPaper$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*preyset)/(h.fit+preyset) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+?plot.xy
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
