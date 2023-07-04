@@ -1,0 +1,938 @@
+---
+title: "ciliate fits"
+output: html_document
+date: "2023-05-26"
+---
+---
+title: "Untitled"
+output: html_document
+date: "2023-05-23"
+---
+```{r}
+# Loading our dataset
+getwd()
+data <- read.csv("C:/Users/jkami/Downloads/CiliateGrazingData - ExtractedData.csv")
+data$Pred.Prey <- paste(data$Genus,data$Species,'.',data$Prey,sep='')
+
+fits <- data[data$EnteredBy=="JK",]
+fits
+
+predpreylist <- unique(fits$Pred.Prey)
+```
+```{r}
+mylist <- list("Mesodiniumrubrum.Teleaulax sp", "Eutintinnuspectinis.Isochrysis galbana", "Tintinnopsisacuminata.Isochrysis galbana", "Helicostomellasubulata.Isochrysis galbana", "Strobilidiumneptuni.Chroomonas salina", "Strobilidiumveniliae.Chroomonas salina; Isochrysis galbana", "Strobilidiumsp..Biecheleria cincta", "Strobilidiumsp..Isochrysis galbana")
+
+predpreynew <- setdiff(predpreylist, mylist)
+```
+
+
+
+# General script for GROWTH fits
+```{r}
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=0.6,H=300,x.int=100))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.int.fit))/(h.fit+preyset-x.int.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit
+h.fit
+x.int.fit
+```
+
+# General script for INGESTION fits
+```{r}
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x.start <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
+
+# STROBILIDIUM NEPTUNI & CHROOMONAS SALINA
+
+```{r}
+# CURVE FITS: Strobilidium Neptuni & Chroomonas salina
+SNgrowth <- data[data$Pred.Prey=="Strobilidiumneptuni.Chroomonas salina",]
+
+#SNgrowthN <- SNgrowth[SNgrowth$Growth.perday>=0,]
+
+# Making a basic plot of prey concentration vs. growth rate
+plot(SNgrowth$Growth.perday ~ SNgrowth$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Growth per day',xlim=c(0,100000))
+
+# Make an NLS fit for the data
+# Equation is growth(max) * [prey] / H + [prey]
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x))/(H+(PreyConc.cellsmL-1)),data=SNgrowth,start=list(mu=1.8,H=20000,x=10000))
+
+summary(MonodFit)
+
+# Max growth rate: 1.7842
+# Half-saturation: 24950
+# This lines up pretty well with the reported data from the paper!
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(SNgrowth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.fit))/(h.fit+preyset-x.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit # 1.6745
+h.fit # 14105.37
+x.fit # 3848.517
+```
+
+# STROBILIDIUM VENILIAE + PREY GROWTH
+```{r}
+
+growthdata <- data[data$Pred.Prey=="Strobilidiumveniliae.Chroomonas salina; Isochrysis galbana" & data$Data.Type=="Growth",]
+
+plot(growthdata$Growth.perday ~ growthdata$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=growthdata,start=list(mu=0.6,H=5000,x.int=0))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.int.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(growthdata$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.int.fit))/(h.fit+preyset-x.int.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit # 0.6167
+h.fit # 9126.9634
+x.int.fit # 4591.508
+```
+
+# STROBILIDIUM SP AND BIECHELERIA CINCTA INGESTION
+
+```{r}
+ingdata <- data[data$Pred.Prey=="Strobilidiumsp..Biecheleria cincta" & data$Data.Type=="Ingestion",]
+
+# Making a basic plot of prey concentration vs ingestion rate
+plot(ingdata$PreyConsumption.preyperciliateperday ~ ingdata$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(ingdata$PreyConsumption.preyperciliateperday~ingdata$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(ingdata$PreyConsumption.preyperciliateperday)
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL)/(1+a*h*(PreyConc.cellsmL)),data=ingdata,start=list(a=a.start,h=h.start))
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+ 
+preyset <- seq(from = 0, to = max(ingdata$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset)/(1+a.fit*h.fit*(preyset)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+a.fit # 0.02747
+h.fit # 0.04945
+```
+# STROBILIDIUM SP + ISOCHRYSIS GALBANA GROWTH
+
+```{r}
+growthdata <- data[data$Pred.Prey=="Strobilidiumsp..Isochrysis galbana" & data$Data.Type=="Growth",]
+
+plot(growthdata$Growth.perday ~ growthdata$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=growthdata,start=list(mu= ,H= ,x.int= ))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.int.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(growthdata$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.int.fit))/(h.fit+preyset-x.int.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit
+h.fit
+x.int.fit
+```
+
+# STROBILIDIUM + ISOCHRYSIS INGESTION
+```{r}
+ingdata <- data[data$Pred.Prey=="Strobilidiumsp..Isochrysis galbana" & data$Data.Type=="Ingestion",]
+
+# Making a basic plot of prey concentration vs ingestion rate
+plot(ingdata$PreyConsumption.preyperciliateperday ~ ingdata$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(ingdata$PreyConsumption.preyperciliateperday~ingdata$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(ingdata$PreyConsumption.preyperciliateperday)
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=ingdata,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(ingdata$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x.fit)/(1+a.fit*h.fit*(preyset-x.fit)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+a.fit # 0.67242
+h.fit # 0.00007815
+x.fit # 393.5597
+```
+
+
+# STROBILIDIUM + NANNOCHLOROPSIS INGESTION
+```{r}
+ingdata <- data[data$Pred.Prey=="Strobilidiumsp..Nannochloropsis sp." & data$Data.Type=="Ingestion",]
+
+# Making a basic plot of prey concentration vs ingestion rate
+plot(ingdata$PreyConsumption.preyperciliateperday ~ ingdata$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(ingdata$PreyConsumption.preyperciliateperday~ingdata$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(ingdata$PreyConsumption.preyperciliateperday)
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=ingdata,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(ingdata$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x.fit)/(1+a.fit*h.fit*(preyset-x.fit)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+a.fit # 0.62623
+h.fit # 0.0001058
+x.fit # 1843.736
+```
+
+# Pred/Prey Combo 1 - Stenosemella ventricosa + Natural particles
+```{r}
+cur_pp = predpreynew[1]
+cur_pp
+
+svnp_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+svnp_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+# No growth, so let's just do the ingestion fits
+
+plot(svnp_ingestion$PreyConsumption.preyperciliateperday ~ svnp_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate',pch=c(21,22)[as.factor(svnp_ingestion$PredatorSize)])
+
+# Looks like we have two very different trends in the data - does it differ
+# based on predator size? Let's check
+
+svnp_ingestion_sm <- svnp_ingestion[svnp_ingestion$PredatorSize==4.79,]
+svnp_ingestion_lg <- svnp_ingestion[svnp_ingestion$PredatorSize==8.95,]
+
+plot(svnp_ingestion_sm$PreyConsumption.preyperciliateperday ~ svnp_ingestion_sm$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# plot(svnp_ingestion_lg$PreyConsumption.preyperciliateperday ~ svnp_ingestion_lg$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data - pred size = small
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(svnp_ingestion_sm$PreyConsumption.preyperciliateperday~svnp_ingestion_sm$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(svnp_ingestion_sm$PreyConsumption.preyperciliateperday)
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=svnp_ingestion_sm,start=list(a=a.start,h=h.start, x=0))
+
+# summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(svnp_ingestion_sm$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x.fit)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+a.fit
+h.fit
+x.fit
+
+```
+
+```{r}
+
+plot(svnp_ingestion_lg$PreyConsumption.preyperciliateperday ~ svnp_ingestion_lg$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data - pred size = small
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(svnp_ingestion_lg$PreyConsumption.preyperciliateperday~svnp_ingestion_lg$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(svnp_ingestion_lg$PreyConsumption.preyperciliateperday)
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=svnp_ingestion_lg,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(svnp_ingestion_lg$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x.fit)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
+
+# Pred/Prey Combo 2 - Stemosemella cf. + natural particles
+# This combo only had clearance rate data
+```{r}
+cur_pp = predpreynew[2]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 3 - Helicostomella cf. + Natural particles
+# Only clearance rate data for this combo
+```{r}
+cur_pp = predpreynew[3]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 4 - Tiarina cf. + natural particles
+# Only clearance rate data for this combo
+```{r}
+cur_pp = predpreynew[4]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 5 - Gymnodinium cf. + natural particles
+# Only clearance rate data for this one
+```{r}
+cur_pp = predpreynew[5]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 6 - Thecate cf. + natural particles
+# Only clearance rate data for this combo
+```{r}
+cur_pp = predpreynew[6]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 7 - Tintinnidium fluviatile + natural particles
+# Ingestion data, but maybe not enough data to create a curve? only 4 data points
+# Upon review: paper doesn't give enoughh data to create a curve. Should we overlook? The current data comes from a single table that only gives maximum growth rates across 3-4 experiments.
+# This is true for the next few pred/prey combos since they're all from the same paper.
+```{r}
+cur_pp = predpreynew[7]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+# We have ingestion data!
+
+# Making a basic plot of prey concentration vs ingestion rate
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x.start <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
+
+# Pred/Prey Combo 8 - Helicostomella subulata + Natural particles
+# Only 2 ingestion data - REVIEW PAPER LATER
+```{r}
+cur_pp = predpreynew[8]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+
+# Pred/Prey Combo 9 - Tintinnopsis parva + natural particles
+# Only 1 ingestion data, recheck paper
+```{r}
+cur_pp = predpreynew[9]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 10 - Tintinnopsis acuminata + natural particles
+# RECHECK PAPER
+```{r}
+cur_pp = predpreynew[10]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+# Pred/Prey Combo 11 - Stenosemella oliva + natural particles
+# RECHECK PAPER
+```{r}
+cur_pp = predpreynew[11]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 12 - Tintinnopsis vasculum + natural particles
+# only growth, recheck paper
+```{r}
+cur_pp = predpreynew[12]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 13 - Tintinnopsis beroidea + natural particles
+```{r}
+cur_pp = predpreynew[13]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 14 - Favella ehrenbergii + Alexandrium tamarense
+# Growth data looks like a y-axis mirrored version of the Monod fit
+# Doublecheck paper + data
+```{r}
+cur_pp = predpreynew[14]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=0.6,H=300,x.int=100))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.int.fit))/(h.fit+preyset-x.int.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit
+h.fit
+x.int.fit
+
+```
+
+# Pred/Prey Combo 15 - Favella ehrenbergii + Gymnodinium sp.
+# Paper only lists one experiment for Favella growth, can't calculate a table or growth constants off of this data
+```{r}
+cur_pp = predpreynew[15]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 16 - Favella ehrenbergii + Gonyaulax tamarensis
+# Same as 15
+```{r}
+cur_pp = predpreynew[16]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 17 - Favella ehrenbergii + Gonyaulax polyedra
+# Same as 15
+```{r}
+cur_pp = predpreynew[17]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 18 - Favella ehrenbergii + Scrippsiella trophoidea
+# Same as 15
+```{r}
+cur_pp = predpreynew[18]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 19 - Favella ehrenbergii + Heterocapsa sp.
+# Same as 15
+```{r}
+cur_pp = predpreynew[19]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 20 - Favella ehrenbergii + Prorocentrum mariaelebouriae
+# Same as 15
+```{r}
+cur_pp = predpreynew[20]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 21 - Tintinnopsis vasculum + Dicrateria inornata
+# Ingestion data
+# New problem: R studio is refusing to overlay the curve fit on my plot?
+```{r}
+cur_pp = predpreynew[21]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+# 
+# cur_ingestion_15 = cur_ingestion[cur_ingestion$Temperature==15,]
+# cur_ingestion_10 = cur_ingestion[cur_ingestion$Temperature==10,]
+# cur_ingestion_5 = cur_ingestion[cur_ingestion$Temperature==5,]
+# 
+# plot(cur_ingestion_15$PreyConsumption.preyperciliateperday ~ cur_ingestion_15$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x.start <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x.fit)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset, predicts, lwd=2, col='blue') # Add our curve to the plot using the 'lines' function
+```
+
+# Pred/Prey Combo 21 - Tintinnopsis vasculum + Dicrateria inornata
+# Growth rate data
+# Problem: fit is incorrect, the x intercept shouldn't be greater than the
+# half saturation value right? Plus, the graph is adding a line
+```{r}
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day',xlim=c(0,60000))
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=0.8,H=10000,x.int=0))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.fit))/(h.fit+preyset-x.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit # 0.7268
+h.fit # 1067.49
+x.fit # 2083.525
+```
+
+# Pred/Prey Combo 22 - Tintinnopsis acuminata - Dicrateria inornata
+# Ingestion data
+```{r}
+cur_pp = predpreynew[22]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=0.01,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1] # 0.1369
+h.fit <- summary(HollingFit)$parameters[2,1] # 0.009589
+x.fit <- summary(HollingFit)$parameters[3,1] # 1841.163
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
+
+# Pred/Prey Combo 22 - Tintinnopsis acuminata - Dicrateria inornata
+# Growth rate data
+```{r}
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=1.5,H=5000,x.int=0))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.fit))/(h.fit+preyset-x.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit # 1.4239
+h.fit # 4687.607
+x.fit # 3906.075
+```
+
+# Pred/Prey Combo 23 - Euplotes vannus + Vibrio sp.
+# No data - only one point for growth for both this and the next one
+# So in this case, because I only have one growth curve, I can't fit a curve to multiple growth rates. Can we just ignore this data for combo 23/24?
+```{r}
+cur_pp = predpreynew[23]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+# Pred/Prey Combo 24 - Euplotes vannus + Dunaliella tertiolecta
+```{r}
+cur_pp = predpreynew[24]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 25 - Histriobalanthium marinum + mixed prey
+# Ingestion rate data
+# Combos 25 - 32 are from the same paper
+# Which we have discussed before - this does not have any conversion factors for the odd units and as such I am not able to convert the ingestion rate data from ng/cell*hr to prey per ciliate per day
+```{r}
+cur_pp = predpreynew[25]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=0.01,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1] # 0.1369
+h.fit <- summary(HollingFit)$parameters[2,1] # 0.009589
+x.fit <- summary(HollingFit)$parameters[3,1] # 1841.163
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+```
+# ... To pred/prey combo 32
+```{r}
+cur_pp = predpreynew[32]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+# Pred/Prey combl 33 - Euplotes vannus + Tetraselmis tetrathele
+# Growth data
+# 33 and 34 are from the same paper - we have hand calculated growth rates, but only two data points for each combo.
+```{r}
+cur_pp = predpreynew[33]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey combo 35 - Euplotes vannus + Skeletonema costatum
+# Growth data separated by unbroken/broken prey cell chains
+# Problem here is that there is no prey concentration data for this paper
+# We have a lot of growth rate data points but the paper provides no data on what our S. costatum concentration is at any of these data points, thus, I can't make a graph
+```{r}
+cur_pp = predpreynew[35]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=0.6,H=300,x.int=100))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.fit))/(h.fit+preyset-x.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+mu.fit
+h.fit
+x.fit
+```
+
+# Prey/Pred Combo 36: Uronema sp. + Natural particles
+# Only one growth rate data for this one?
+# The paper is weird as it reports maximum and minimum growth rates for samples taken from the Barents Sea but it doesn't seem as though they did any actual experiments on it...
+# Ignore for now. Paper covers combos 36-51
+```{r}
+cur_pp = predpreynew[36]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
+# Pred/Prey Combo 52 - Strobilidium sp. + Nannochloropsis sp.
+# Growth rate data
+```{r}
+cur_pp = predpreynew[52]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+
+plot(cur_growth$Growth.perday ~ cur_growth$PreyConc.cellsmL, xlab='Prey Concen.', ylab='Growth per day')
+
+MonodFit <- nls(Growth.perday ~ (mu*(PreyConc.cellsmL-x.int))/(H+PreyConc.cellsmL-x.int),data=cur_growth,start=list(mu=0.6,H=300,x.int=100))
+
+mu.fit <- summary(MonodFit)$parameters[1,1]
+h.fit <- summary(MonodFit)$parameters[2,1]
+x.fit <- summary(MonodFit)$parameters[3,1]
+
+preyset <- seq(from = 0, to = max(cur_growth$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- (mu.fit*(preyset-x.fit))/(h.fit+preyset-x.fit) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+ 
+mu.fit # 3.54306
+h.fit # 7720.382
+x.fit # 1069.948
+```
+
+# Strobilidium sp. + Nannochloropsis sp. 
+# Ingestion rate data
+```{r}
+plot(cur_ingestion$PreyConsumption.preyperciliateperday ~ cur_ingestion$PreyConc.cellsmL,xlab='Prey Concen.', ylab='Ingestion Rate')
+
+# Make an NLS fit for the data
+# First, estimate a and h
+# a will be the initial slope, so we can get it from a linear model
+
+a.start <- lm(cur_ingestion$PreyConsumption.preyperciliateperday~cur_ingestion$PreyConc.cellsmL)$coefficients[2]
+
+# h is the inverse of max consumption rate
+h.start <- 1/max(cur_ingestion$PreyConsumption.preyperciliateperday)
+x.start <- 0
+
+# Equation is ingestion = aP/(1 + ahP)
+HollingFit <- nls(PreyConsumption.preyperciliateperday ~ a*(PreyConc.cellsmL-x)/(1+a*h*(PreyConc.cellsmL-x)),data=cur_ingestion,start=list(a=a.start,h=h.start, x=0))
+
+summary(HollingFit)
+
+a.fit <- summary(HollingFit)$parameters[1,1]
+h.fit <- summary(HollingFit)$parameters[2,1]
+x.fit <- summary(HollingFit)$parameters[3,1]
+ 
+preyset <- seq(from = 0, to = max(cur_ingestion$PreyConc.cellsmL), length.out = 100) # Generate a list of x values
+predicts <- a.fit*(preyset-x)/(1+a.fit*h.fit*(preyset-1)) # Use the Holling Functional Response to generate the predicted grazing rates for each prey value
+ 
+lines(preyset,predicts,lwd=2,col='blue') # Add our curve to the plot using the 'lines' function
+
+a.fit # 0.6262
+h.fit # 0.0001058
+x.fit # 1843.736
+```
+
+```{r}
+cur_pp = predpreynew[53]
+cur_pp
+
+fits[fits$Pred.Prey==cur_pp,]
+
+cur_ingestion = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Ingestion",]
+cur_growth = fits[fits$Pred.Prey==cur_pp & fits$Data.Type=="Growth",]
+```
+
